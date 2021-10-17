@@ -8,6 +8,8 @@ import org.modelmapper.ModelMapper;
 import org.modelmapper.TypeToken;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.hateoas.CollectionModel;
+import org.springframework.hateoas.EntityModel;
 import org.springframework.hateoas.Link;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -35,7 +37,7 @@ import com.mobile.ws.service.AddressService;
 import com.mobile.ws.service.UserService;
 
 @RestController
-@RequestMapping("users")
+@RequestMapping("/users")
 public class UserController {
 
 	@Autowired
@@ -110,32 +112,41 @@ public class UserController {
 		return response;
 	}
 
+	@SuppressWarnings("deprecation")
 	@GetMapping(path = "/{userId}/addresses", 
-			produces = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE })
-	public List<AddressResponse> getUserAddresses(@PathVariable String userId) {
+			produces = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE, "application/hal+json" })
+	public CollectionModel<AddressResponse> getUserAddresses(@PathVariable String userId) {
 
-		List<AddressResponse> response = new ArrayList<>();
+		List<AddressResponse> addressResponseList = new ArrayList<>();
 
 		List<AddressDto> addressesDto = addressService.getAddresses(userId);
 		
 		if (addressesDto != null && !addressesDto.isEmpty()) {
 			Type listType = new TypeToken<List<AddressResponse>>() {
 			}.getType();
-			response = new ModelMapper().map(addressesDto, listType);
+			addressResponseList = new ModelMapper().map(addressesDto, listType);
+			for(AddressResponse address : addressResponseList) {
+				Link addressLink = linkTo(methodOn(UserController.class).getUserAddress(userId, address.getAddressId())).withSelfRel();
+				address.add(addressLink);
+				
+				Link userLink = linkTo(methodOn(UserController.class).getUserAddresses(userId)).withRel("user");
+				address.add(userLink);
+			}
 		}
-		return response;
+		return new CollectionModel<>(addressResponseList);
 	}
 	
+	@SuppressWarnings("deprecation")
 	@GetMapping(path = "/{userId}/addresses/{addressId}", 
-			produces = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE })
-	public AddressResponse getUserAddress(@PathVariable String userId, @PathVariable String addressId) {
+			produces = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE, "application/hal+json" })
+	public EntityModel<AddressResponse> getUserAddress(@PathVariable String userId, @PathVariable String addressId) {
 
 		AddressResponse response = new AddressResponse();
 		AddressDto addressesDto = addressService.getAddress(addressId);	
 		
-		Link addressLink = linkTo(UserController.class).slash(userId).slash("addresses").slash(addressId).withSelfRel();
+		Link addressLink = linkTo(methodOn(UserController.class).getUserAddress(userId, addressId)).withSelfRel();
 		Link addressesLink = linkTo(UserController.class).slash(userId).slash("addresses").withRel("addresses");
-		Link userLink = linkTo(UserController.class).slash(userId).withRel("user");
+		Link userLink = linkTo(methodOn(UserController.class).getUserAddresses(userId)).withRel("user");
 		
 		if (addressesDto != null) {
 			response = new ModelMapper().map(addressesDto, AddressResponse.class);
@@ -144,7 +155,7 @@ public class UserController {
 		response.add(userLink);
 		response.add(addressesLink);
 		
-		return response;
+		return new EntityModel<>(response);
 	}
 
 }
